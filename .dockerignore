@@ -1,0 +1,36 @@
+# .NET build artifacts
+**/bin/
+**/obj/
+**/out/
+
+# User-specific files
+*.user
+*.userosscache
+*.suo
+
+# Visual Studio files
+.vs/
+.vscode/
+
+# Terraform
+terraform/
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Temporary files
+tmp_rovodev_*
+*.tmp
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
