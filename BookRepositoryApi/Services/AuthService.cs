@@ -64,7 +64,7 @@ public sealed class AuthService : IAuthService
         {
             Username = username,
             NormalizedUsername = normalized,
-            Role = Roles.User
+            Role = Roles.Reader
         };
         user.PasswordHash = _hasher.HashPassword(user, request.Password);
 
@@ -87,6 +87,7 @@ public sealed class AuthService : IAuthService
     {
         var claims = new[]
         {
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(ClaimTypes.Name, user.Username),
             new Claim(ClaimTypes.Role, user.Role)
         };

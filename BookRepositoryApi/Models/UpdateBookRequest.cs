@@ -7,8 +7,7 @@ public sealed class UpdateBookRequest
     [Required, MaxLength(200)]
     public string Title { get; set; } = string.Empty;
 
-    [Required, MaxLength(120)]
-    public string Author { get; set; } = string.Empty;
+    // author is read-only; cannot be changed via update
 
     [Required, MaxLength(20)]
     public string Isbn { get; set; } = string.Empty;

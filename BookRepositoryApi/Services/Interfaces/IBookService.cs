@@ -1,10 +1,12 @@
+using BookRepositoryApi.Models;
+
 namespace BookRepositoryApi.Services.Interfaces;
 
 public interface IBookService
 {
-    IReadOnlyCollection<BookRepositoryApi.Models.Book> GetAll();
-    BookRepositoryApi.Models.Book? GetById(int id);
-    BookRepositoryApi.Models.Book Create(BookRepositoryApi.Models.CreateBookRequest request);
-    bool Update(int id, BookRepositoryApi.Models.UpdateBookRequest request);
+    IReadOnlyCollection<BookResponse> GetAll();
+    BookResponse? GetById(int id);
+    BookResponse Create(CreateBookRequest request, int authorId);
+    bool Update(int id, UpdateBookRequest request);
     bool Delete(int id);
 }

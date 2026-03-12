@@ -24,6 +24,13 @@ public class AppDbContext : DbContext
             entity.Property(b => b.Title).HasMaxLength(200).IsRequired();
             entity.Property(b => b.Author).HasMaxLength(120).IsRequired();
             entity.Property(b => b.Isbn).HasMaxLength(20).IsRequired();
+
+            // relationship to the user who created the book
+            entity.Property(b => b.AuthorId).IsRequired();
+            entity.HasOne(b => b.AuthorUser)
+                  .WithMany(u => u.Books)
+                  .HasForeignKey(b => b.AuthorId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<AppUser>(entity =>

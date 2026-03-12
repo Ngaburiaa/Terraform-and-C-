@@ -126,15 +126,23 @@ using (var scope = app.Services.CreateScope())
         };
         admin.PasswordHash = hasher.HashPassword(admin, "Admin@123");
 
+        var author = new AppUser
+        {
+            Username = "author",
+            NormalizedUsername = "author",
+            Role = Roles.Author
+        };
+        author.PasswordHash = hasher.HashPassword(author, "Author@123");
+
         var reader = new AppUser
         {
             Username = "reader",
             NormalizedUsername = "reader",
-            Role = Roles.User
+            Role = Roles.Reader
         };
         reader.PasswordHash = hasher.HashPassword(reader, "Reader@123");
 
-        db.Users.AddRange(admin, reader);
+        db.Users.AddRange(admin, author, reader);
         db.SaveChanges();
     }
 }

@@ -39,4 +39,18 @@ public sealed class UsersController : ControllerBase
 
         return Ok(user);
     }
+
+    [Authorize(Roles = Roles.Admin)]
+    [HttpDelete(ApiRoutes.Users.ById)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult Delete(int id)
+    {
+        var deleted = _userService.Delete(id);
+        if (!deleted)
+        {
+            return NotFound(new { message = "User not found" });
+        }
+        return NoContent();
+    }
 }

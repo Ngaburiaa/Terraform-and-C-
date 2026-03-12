@@ -19,18 +19,18 @@ public sealed class BooksController : ControllerBase
     }
 
     [HttpGet(ApiRoutes.Books.Root)]
-    [Authorize(Roles = $"{Roles.Admin},{Roles.User}")]
-    [ProducesResponseType(typeof(IReadOnlyCollection<Book>), StatusCodes.Status200OK)]
-    public ActionResult<IReadOnlyCollection<Book>> GetAll()
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Author},{Roles.Reader}")]
+    [ProducesResponseType(typeof(IReadOnlyCollection<BookResponse>), StatusCodes.Status200OK)]
+    public ActionResult<IReadOnlyCollection<BookResponse>> GetAll()
     {
         return Ok(_bookService.GetAll());
     }
 
     [HttpGet(ApiRoutes.Books.ById)]
-    [Authorize(Roles = $"{Roles.Admin},{Roles.User}")]
-    [ProducesResponseType(typeof(Book), StatusCodes.Status200OK)]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Author},{Roles.Reader}")]
+    [ProducesResponseType(typeof(BookResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult<Book> GetById([FromRoute] int id)
+    public ActionResult<BookResponse> GetById([FromRoute] int id)
     {
         var book = _bookService.GetById(id);
         if (book is null)
@@ -42,20 +42,42 @@ public sealed class BooksController : ControllerBase
     }
 
     [HttpPost(ApiRoutes.Books.Root)]
-    [Authorize(Roles = $"{Roles.Admin},{Roles.User}")]
-    [ProducesResponseType(typeof(Book), StatusCodes.Status201Created)]
-    public ActionResult<Book> Create([FromBody] CreateBookRequest request)
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Author}")]
+    [ProducesResponseType(typeof(BookResponse), StatusCodes.Status201Created)]
+    public ActionResult<BookResponse> Create([FromBody] CreateBookRequest request)
     {
-        var created = _bookService.Create(request);
+        // take the current user id from the JWT claims
+        if (!int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var userId))
+        {
+            return Forbid();
+        }
+
+        var created = _bookService.Create(request, userId);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
     [HttpPut(ApiRoutes.Books.ById)]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Author}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public IActionResult Update([FromRoute] int id, [FromBody] UpdateBookRequest request)
     {
+        var book = _bookService.GetById(id);
+        if (book is null)
+        {
+            return NotFound(new { message = "Book not found" });
+        }
+
+        var isAdmin = User.IsInRole(Roles.Admin);
+        if (!isAdmin)
+        {
+            if (!int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var userId) || book.AuthorId != userId)
+            {
+                return Forbid();
+            }
+        }
+
         var updated = _bookService.Update(id, request);
         if (!updated)
         {
@@ -66,11 +88,27 @@ public sealed class BooksController : ControllerBase
     }
 
     [HttpDelete(ApiRoutes.Books.ById)]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Author}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public IActionResult Delete([FromRoute] int id)
     {
+        var book = _bookService.GetById(id);
+        if (book is null)
+        {
+            return NotFound(new { message = "Book not found" });
+        }
+
+        var isAdmin = User.IsInRole(Roles.Admin);
+        if (!isAdmin)
+        {
+            if (!int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var userId) || book.AuthorId != userId)
+            {
+                return Forbid();
+            }
+        }
+
         var deleted = _bookService.Delete(id);
         if (!deleted)
         {

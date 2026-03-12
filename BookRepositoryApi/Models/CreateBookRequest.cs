@@ -7,8 +7,7 @@ public sealed class CreateBookRequest
     [Required, MaxLength(200)]
     public string Title { get; set; } = string.Empty;
 
-    [Required, MaxLength(120)]
-    public string Author { get; set; } = string.Empty;
+    // author is derived from the authenticated user; not supplied by the client
 
     [Required, MaxLength(20)]
     public string Isbn { get; set; } = string.Empty;
