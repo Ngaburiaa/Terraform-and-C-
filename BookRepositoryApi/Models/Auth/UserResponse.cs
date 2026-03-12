@@ -9,5 +9,5 @@ public sealed class UserResponse
     public string Role { get; init; } = string.Empty;
 
     // when fetching users we include any books they own
-    public IReadOnlyCollection<BookResponse> Books { get; init; } = Array.Empty<BookResponse>();
+    public IReadOnlyCollection<BookResponse>? Books { get; init; }
 }
