@@ -17,3 +17,4 @@ public sealed class Book
     public string Isbn { get; set; } = string.Empty;
     public int YearPublished { get; set; }
 }
+

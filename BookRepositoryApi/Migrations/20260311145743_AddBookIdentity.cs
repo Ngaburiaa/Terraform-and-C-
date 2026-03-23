@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -6,11 +6,9 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace BookRepositoryApi.Migrations
 {
-    /// <inheritdoc />
-    public partial class AddBookIdentity : Migration
+public partial class AddBookIdentity : Migration
     {
-        /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
+protected override void Up(MigrationBuilder migrationBuilder)
         {
             // Drop existing tables so we can recreate with identity columns.
             migrationBuilder.Sql(@"DROP TABLE IF EXISTS ""Books"";");
@@ -55,11 +53,11 @@ namespace BookRepositoryApi.Migrations
                 unique: true);
         }
 
-        /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
+protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql(@"DROP TABLE IF EXISTS ""Books"";");
             migrationBuilder.Sql(@"DROP TABLE IF EXISTS ""Users"";");
         }
     }
 }
+

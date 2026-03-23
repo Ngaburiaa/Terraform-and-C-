@@ -15,3 +15,4 @@ public sealed class CreateBookRequest
     [Range(1400, 3000)]
     public int YearPublished { get; set; }
 }
+

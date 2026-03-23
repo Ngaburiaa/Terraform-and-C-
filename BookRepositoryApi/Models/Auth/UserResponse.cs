@@ -11,3 +11,4 @@ public sealed class UserResponse
     // when fetching users we include any books they own
     public IReadOnlyCollection<BookResponse>? Books { get; init; }
 }
+

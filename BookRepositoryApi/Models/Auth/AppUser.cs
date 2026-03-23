@@ -11,3 +11,4 @@ public sealed class AppUser
     // navigation property for books created by this user
     public ICollection<BookRepositoryApi.Models.Book> Books { get; set; } = new List<BookRepositoryApi.Models.Book>();
 }
+

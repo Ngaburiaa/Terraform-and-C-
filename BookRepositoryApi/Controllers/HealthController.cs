@@ -1,3 +1,6 @@
+using BookRepositoryApi.Constants;
+using BookRepositoryApi.Models;
+using BookRepositoryApi.Models.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BookRepositoryApi.Controllers;
@@ -8,54 +11,45 @@ public class HealthController : ControllerBase
 {
     private readonly ILogger<HealthController> _logger;
 
+    // Initializes a new instance of the HealthController class.
     public HealthController(ILogger<HealthController> logger)
     {
         _logger = logger;
     }
 
-    /// <summary>
-    /// Health check endpoint for load balancer and monitoring
-    /// </summary>
-    /// <returns>200 OK if service is healthy</returns>
+    // Returns the overall service health status.
     [HttpGet]
-    public IActionResult Get()
+    [ProducesResponseType(typeof(ApiResponse<HealthStatusResponse>), StatusCodes.Status200OK)]
+    public ActionResult<ApiResponse<HealthStatusResponse>> Get()
     {
         _logger.LogDebug("Health check requested");
-        
-        return Ok(new 
-        { 
-            status = "Healthy",
-            timestamp = DateTime.UtcNow,
-            service = "BookRepositoryApi"
-        });
+
+        return Ok(CreateResponse("Healthy", "BookRepositoryApi"));
     }
 
-    /// <summary>
-    /// Readiness check endpoint
-    /// </summary>
-    /// <returns>200 OK if service is ready to accept traffic</returns>
+    // Returns the readiness state for startup and orchestration checks.
     [HttpGet("ready")]
-    public IActionResult Ready()
-    {
-        // Can add additional checks here (database connectivity, etc.)
-        return Ok(new 
-        { 
-            status = "Ready",
-            timestamp = DateTime.UtcNow
-        });
-    }
+    [ProducesResponseType(typeof(ApiResponse<HealthStatusResponse>), StatusCodes.Status200OK)]
+    public ActionResult<ApiResponse<HealthStatusResponse>> Ready() =>
+        Ok(CreateResponse("Ready"));
 
-    /// <summary>
-    /// Liveness check endpoint
-    /// </summary>
-    /// <returns>200 OK if service is alive</returns>
+    // Returns the liveness state for runtime monitoring.
     [HttpGet("live")]
-    public IActionResult Live()
-    {
-        return Ok(new 
-        { 
-            status = "Alive",
-            timestamp = DateTime.UtcNow
-        });
-    }
+    [ProducesResponseType(typeof(ApiResponse<HealthStatusResponse>), StatusCodes.Status200OK)]
+    public ActionResult<ApiResponse<HealthStatusResponse>> Live() =>
+        Ok(CreateResponse("Alive"));
+
+    private static ApiResponse<HealthStatusResponse> CreateResponse(string status, string? service = null) =>
+        new()
+        {
+            Success = true,
+            Message = ResponseMessages.HealthCheckSucceeded,
+            Data = new HealthStatusResponse
+            {
+                Status = status,
+                TimestampUtc = DateTime.UtcNow,
+                Service = service
+            }
+        };
 }
+

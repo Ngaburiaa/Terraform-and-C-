@@ -1,14 +1,12 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace BookRepositoryApi.Migrations
 {
-    /// <inheritdoc />
-    public partial class AddAuthorRelation : Migration
+public partial class AddAuthorRelation : Migration
     {
-        /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
+protected override void Up(MigrationBuilder migrationBuilder)
         {
             // add the column nullable so existing rows don't violate the new constraint
             migrationBuilder.AddColumn<int>(
@@ -45,8 +43,7 @@ namespace BookRepositoryApi.Migrations
                 onDelete: ReferentialAction.Cascade);
         }
 
-        /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
+protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(
                 name: "FK_Books_Users_AuthorId",
@@ -62,3 +59,4 @@ namespace BookRepositoryApi.Migrations
         }
     }
 }
+

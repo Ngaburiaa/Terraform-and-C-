@@ -1,108 +1,64 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
-using BookRepositoryApi.Data;
+using BookRepositoryApi.Constants;
 using BookRepositoryApi.Models.Auth;
-using BookRepositoryApi.Security;
+using BookRepositoryApi.Models.Common;
+using BookRepositoryApi.Repositories.Interfaces;
 using BookRepositoryApi.Services.Interfaces;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
 
 namespace BookRepositoryApi.Services;
 
+// Coordinates authentication and registration workflows.
 public sealed class AuthService : IAuthService
 {
-    private readonly JwtSettings _jwt;
-    private readonly PasswordHasher<AppUser> _hasher = new();
-    private readonly AppDbContext _context;
+    private readonly IUserRepository _userRepository;
+    private readonly IPasswordService _passwordService;
+    private readonly ITokenService _tokenService;
 
-    public AuthService(IOptions<JwtSettings> jwtOptions, AppDbContext context)
+    // Initializes a new instance of the AuthService class.
+    public AuthService(
+        IUserRepository userRepository,
+        IPasswordService passwordService,
+        ITokenService tokenService)
     {
-        _jwt = jwtOptions.Value;
-        _context = context;
+        _userRepository = userRepository;
+        _passwordService = passwordService;
+        _tokenService = tokenService;
     }
 
-    public LoginResponse? Login(LoginRequest request)
+public async Task<Result<LoginResponse>> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
         var normalized = request.Username.Trim().ToLowerInvariant();
-        var user = _context.Users.FirstOrDefault(u => u.NormalizedUsername == normalized);
-        if (user is null)
+        var user = await _userRepository.GetByNormalizedUsernameAsync(normalized, cancellationToken);
+        if (user is null || !_passwordService.VerifyPassword(user, user.PasswordHash, request.Password))
         {
-            return null;
+            return Result<LoginResponse>.Fail(ResponseMessages.InvalidCredentials);
         }
 
-        var verification = _hasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
-        if (verification is PasswordVerificationResult.Failed)
-        {
-            return null;
-        }
-
-        var expiresAtUtc = DateTime.UtcNow.AddMinutes(60);
-        var token = CreateToken(user, expiresAtUtc);
-
-        return new LoginResponse
-        {
-            AccessToken = token,
-            ExpiresAtUtc = expiresAtUtc,
-            Username = user.Username,
-            Role = user.Role
-        };
+        var response = _tokenService.CreateLoginResponse(user);
+        return Result<LoginResponse>.Succeed(response, ResponseMessages.LoginSucceeded);
     }
 
-    public LoginResponse? Register(RegisterRequest request)
+public async Task<Result<LoginResponse>> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
     {
         var username = request.Username.Trim();
         var normalized = username.ToLowerInvariant();
-
-        if (_context.Users.Any(u => u.NormalizedUsername == normalized))
+        var existingUser = await _userRepository.GetByNormalizedUsernameAsync(normalized, cancellationToken);
+        if (existingUser is not null)
         {
-            return null;
+            return Result<LoginResponse>.Fail(ResponseMessages.UsernameAlreadyExists);
         }
 
         var user = new AppUser
         {
             Username = username,
             NormalizedUsername = normalized,
-            Role = Roles.Reader
+            Role = Security.Roles.Reader
         };
-        user.PasswordHash = _hasher.HashPassword(user, request.Password);
+        user.PasswordHash = _passwordService.HashPassword(user, request.Password);
 
-        _context.Users.Add(user);
-        _context.SaveChanges();
+        await _userRepository.AddAsync(user, cancellationToken);
 
-        var expiresAtUtc = DateTime.UtcNow.AddMinutes(60);
-        var token = CreateToken(user, expiresAtUtc);
-
-        return new LoginResponse
-        {
-            AccessToken = token,
-            ExpiresAtUtc = expiresAtUtc,
-            Username = user.Username,
-            Role = user.Role
-        };
+        var response = _tokenService.CreateLoginResponse(user);
+        return Result<LoginResponse>.Succeed(response, ResponseMessages.RegistrationSucceeded);
     }
-
-    private string CreateToken(AppUser user, DateTime expiresAtUtc)
-    {
-        var claims = new[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Name, user.Username),
-            new Claim(ClaimTypes.Role, user.Role)
-        };
-
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.Key));
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-        var token = new JwtSecurityToken(
-            issuer: _jwt.Issuer,
-            audience: _jwt.Audience,
-            claims: claims,
-            expires: expiresAtUtc,
-            signingCredentials: creds);
-
-        return new JwtSecurityTokenHandler().WriteToken(token);
-    }
-
 }
+

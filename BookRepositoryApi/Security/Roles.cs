@@ -6,3 +6,4 @@ public static class Roles
     public const string Author = "Author";
     public const string Reader = "Reader";
 }
+

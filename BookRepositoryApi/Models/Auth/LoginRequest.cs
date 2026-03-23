@@ -10,3 +10,4 @@ public sealed class LoginRequest
     [Required]
     public string Password { get; set; } = string.Empty;
 }
+

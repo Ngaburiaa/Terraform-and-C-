@@ -26,3 +26,4 @@ public class BookConfiguration : IEntityTypeConfiguration<Book>
               .OnDelete(DeleteBehavior.Cascade);
     }
 }
+

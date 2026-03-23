@@ -15,3 +15,4 @@ public sealed class UpdateBookRequest
     [Range(1800, 2027)]
     public int YearPublished { get; set; }
 }
+

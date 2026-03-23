@@ -23,3 +23,4 @@ public static class ApiRoutes
         public const string ById = Root + "/{id:int}";
     }
 }
+

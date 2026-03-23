@@ -1,17 +1,21 @@
 using System.Text;
+using System.Threading.RateLimiting;
+using BookRepositoryApi.Constants;
+using BookRepositoryApi.Data;
+using BookRepositoryApi.Initialization;
+using BookRepositoryApi.Models.Common;
+using BookRepositoryApi.Repositories;
+using BookRepositoryApi.Repositories.Interfaces;
 using BookRepositoryApi.Security;
 using BookRepositoryApi.Services;
 using BookRepositoryApi.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.HttpLogging;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
-using BookRepositoryApi.Data;
-using BookRepositoryApi.Models.Auth;
-using Microsoft.AspNetCore.Identity;
-using System.Threading.RateLimiting;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -51,6 +55,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 builder.Services.AddControllers();
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var errors = context.ModelState
+            .Where(entry => entry.Value?.Errors.Count > 0)
+            .SelectMany(entry => entry.Value!.Errors.Select(error => error.ErrorMessage))
+            .ToArray();
+
+        return new BadRequestObjectResult(ApiResponse<object>.Failure(ResponseMessages.ValidationFailed, errors));
+    };
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddProblemDetails();
 builder.Services.AddHttpLogging(options =>
@@ -103,48 +119,21 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+builder.Services.AddScoped<IBookRepository, BookRepository>();
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IPasswordService, PasswordService>();
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<DatabaseSeeder>();
 builder.Services.AddScoped<IBookService, BookService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
+await using (var scope = app.Services.CreateAsyncScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
-
-    if (!db.Users.Any())
-    {
-        var hasher = new PasswordHasher<AppUser>();
-
-        var admin = new AppUser
-        {
-            Username = "admin",
-            NormalizedUsername = "admin",
-            Role = Roles.Admin
-        };
-        admin.PasswordHash = hasher.HashPassword(admin, "Admin@123");
-
-        var author = new AppUser
-        {
-            Username = "author",
-            NormalizedUsername = "author",
-            Role = Roles.Author
-        };
-        author.PasswordHash = hasher.HashPassword(author, "Author@123");
-
-        var reader = new AppUser
-        {
-            Username = "reader",
-            NormalizedUsername = "reader",
-            Role = Roles.Reader
-        };
-        reader.PasswordHash = hasher.HashPassword(reader, "Reader@123");
-
-        db.Users.AddRange(admin, author, reader);
-        db.SaveChanges();
-    }
+    var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
+    await seeder.InitializeAsync(app.Configuration, CancellationToken.None);
 }
 
 app.UseExceptionHandler(errorApp =>
@@ -156,17 +145,20 @@ app.UseExceptionHandler(errorApp =>
         {
             app.Logger.LogError(exception, "Unhandled exception.");
         }
-        var title = "An unexpected error occurred.";
-        var detail = app.Environment.IsDevelopment() ? exception?.Message : null;
 
-        var problem = Results.Problem(
-            title: title,
-            detail: detail,
-            statusCode: StatusCodes.Status500InternalServerError);
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        context.Response.ContentType = "application/json";
 
-        await problem.ExecuteAsync(context);
+        var response = ApiResponse<object>.Failure(
+            ResponseMessages.UnexpectedError,
+            app.Environment.IsDevelopment() && exception is not null
+                ? new[] { exception.Message }
+                : Array.Empty<string>());
+
+        await context.Response.WriteAsJsonAsync(response);
     });
 });
+
 app.UseHttpsRedirection();
 app.UseHttpLogging();
 app.UseRateLimiter();
@@ -183,3 +175,4 @@ app.MapControllers()
     .RequireRateLimiting("default");
 
 app.Run();
+

@@ -1,4 +1,5 @@
 using BookRepositoryApi.Models.Auth;
+using BookRepositoryApi.Models.Common;
 using BookRepositoryApi.Routes;
 using BookRepositoryApi.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
@@ -10,42 +11,45 @@ public sealed class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
 
+    // Initializes a new instance of the AuthController class.
     public AuthController(IAuthService authService)
     {
         _authService = authService;
     }
 
+    // Authenticates a user with username and password credentials.
     [HttpPost(ApiRoutes.Auth.Login)]
-    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public ActionResult<LoginResponse> Login([FromBody] LoginRequest request)
+    [ProducesResponseType(typeof(ApiResponse<LoginResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<LoginResponse>), StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ApiResponse<LoginResponse>>> Login(
+        [FromBody] LoginRequest request,
+        CancellationToken cancellationToken)
     {
-        var result = _authService.Login(request);
-        if (result is null)
+        var result = await _authService.LoginAsync(request, cancellationToken);
+        if (!result.Success)
         {
-            return Unauthorized(new { message = "Invalid username or password" });
+            return Unauthorized(ApiResponse<LoginResponse>.Failure(result.Message));
         }
 
-        return Ok(result);
+        return Ok(ApiResponse<LoginResponse>.FromResult(result));
     }
 
+    // Registers a new reader account.
     [HttpPost(ApiRoutes.Auth.Register)]
-    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public ActionResult<LoginResponse> Register([FromBody] RegisterRequest request)
+    [ProducesResponseType(typeof(ApiResponse<LoginResponse>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponse<LoginResponse>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<LoginResponse>), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ApiResponse<LoginResponse>>> Register(
+        [FromBody] RegisterRequest request,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
+        var result = await _authService.RegisterAsync(request, cancellationToken);
+        if (!result.Success)
         {
-            return BadRequest(new { message = "Username and password are required" });
+            return Conflict(ApiResponse<LoginResponse>.Failure(result.Message));
         }
 
-        var result = _authService.Register(request);
-        if (result is null)
-        {
-            return Conflict(new { message = "Username already exists" });
-        }
-
-        return Created(ApiRoutes.Auth.Login, result);
+        return Created(ApiRoutes.Auth.Login, ApiResponse<LoginResponse>.FromResult(result));
     }
 }
+

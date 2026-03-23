@@ -1,4 +1,5 @@
 using BookRepositoryApi.Models.Auth;
+using BookRepositoryApi.Models.Common;
 using BookRepositoryApi.Routes;
 using BookRepositoryApi.Security;
 using BookRepositoryApi.Services.Interfaces;
@@ -12,45 +13,52 @@ public sealed class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
 
+    // Initializes a new instance of the UsersController class.
     public UsersController(IUserService userService)
     {
         _userService = userService;
     }
 
+    // Retrieves all users for administrators.
     [Authorize(Roles = Roles.Admin)]
     [HttpGet(ApiRoutes.Users.Root)]
-    [ProducesResponseType(typeof(IReadOnlyCollection<UserResponse>), StatusCodes.Status200OK)]
-    public ActionResult<IReadOnlyCollection<UserResponse>> GetAll()
+    [ProducesResponseType(typeof(ApiResponse<IReadOnlyCollection<UserResponse>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<IReadOnlyCollection<UserResponse>>>> GetAll(CancellationToken cancellationToken)
     {
-        return Ok(_userService.GetAll());
+        var result = await _userService.GetAllAsync(cancellationToken);
+        return Ok(ApiResponse<IReadOnlyCollection<UserResponse>>.FromResult(result));
     }
 
+    // Retrieves a user by identifier for administrators.
     [Authorize(Roles = Roles.Admin)]
     [HttpGet(ApiRoutes.Users.ById)]
-    [ProducesResponseType(typeof(UserResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult<UserResponse> GetById(int id)
+    [ProducesResponseType(typeof(ApiResponse<UserResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<UserResponse>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<UserResponse>>> GetById(int id, CancellationToken cancellationToken)
     {
-        var user = _userService.GetById(id);
-        if (user is null)
+        var result = await _userService.GetByIdAsync(id, cancellationToken);
+        if (!result.Success)
         {
-            return NotFound(new { message = "User not found" });
+            return NotFound(ApiResponse<UserResponse>.Failure(result.Message));
         }
 
-        return Ok(user);
+        return Ok(ApiResponse<UserResponse>.FromResult(result));
     }
 
+    // Deletes a user by identifier for administrators.
     [Authorize(Roles = Roles.Admin)]
     [HttpDelete(ApiRoutes.Users.ById)]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public IActionResult Delete(int id)
+    [ProducesResponseType(typeof(ApiResponse<OperationResult>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<OperationResult>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<OperationResult>>> Delete(int id, CancellationToken cancellationToken)
     {
-        var deleted = _userService.Delete(id);
-        if (!deleted)
+        var result = await _userService.DeleteAsync(id, cancellationToken);
+        if (!result.Success)
         {
-            return NotFound(new { message = "User not found" });
+            return NotFound(ApiResponse<OperationResult>.Failure(result.Message));
         }
-        return NoContent();
+
+        return Ok(ApiResponse<OperationResult>.FromResult(result));
     }
 }
+

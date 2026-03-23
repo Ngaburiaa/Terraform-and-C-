@@ -1,82 +1,42 @@
-using BookRepositoryApi.Data;
-using BookRepositoryApi.Models;
+using BookRepositoryApi.Constants;
 using BookRepositoryApi.Models.Auth;
+using BookRepositoryApi.Models.Common;
+using BookRepositoryApi.Repositories.Interfaces;
 using BookRepositoryApi.Services.Interfaces;
-using Microsoft.EntityFrameworkCore;
 
 namespace BookRepositoryApi.Services;
 
+// Handles user-related business operations.
 public sealed class UserService : IUserService
 {
-    private readonly AppDbContext _context;
+    private readonly IUserRepository _userRepository;
 
-    public UserService(AppDbContext context)
+    // Initializes a new instance of the UserService class.
+    public UserService(IUserRepository userRepository)
     {
-        _context = context;
+        _userRepository = userRepository;
     }
 
-    public IReadOnlyCollection<UserResponse> GetAll()
+public async Task<Result<IReadOnlyCollection<UserResponse>>> GetAllAsync(CancellationToken cancellationToken)
     {
-        return _context.Users
-            .AsNoTracking()
-            .Include(u => u.Books)
-            .OrderBy(u => u.Username)
-            .Select(u => new UserResponse
-            {
-                Id = u.Id,
-                Username = u.Username,
-                Role = u.Role,
-                Books = u.Books
-                    .OrderBy(b => b.Title)
-                    .Select(b => new BookResponse
-                    {
-                        Id = b.Id,
-                        Title = b.Title,
-                        Isbn = b.Isbn,
-                        YearPublished = b.YearPublished,
-                        AuthorId = b.AuthorId,
-                        AuthorUsername = b.Author
-                    })
-                    .ToList()
-            })
-            .ToList();
+        var users = await _userRepository.GetAllAsync(cancellationToken);
+        return Result<IReadOnlyCollection<UserResponse>>.Succeed(users, ResponseMessages.UsersRetrieved);
     }
 
-    public UserResponse? GetById(int id)
+public async Task<Result<UserResponse>> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
-        return _context.Users
-            .AsNoTracking()
-            .Include(u => u.Books)
-            .Where(u => u.Id == id)
-            .Select(u => new UserResponse
-            {
-                Id = u.Id,
-                Username = u.Username,
-                Role = u.Role,
-                Books = u.Books
-                    .OrderBy(b => b.Title)
-                    .Select(b => new BookResponse
-                    {
-                        Id = b.Id,
-                        Title = b.Title,
-                        Isbn = b.Isbn,
-                        YearPublished = b.YearPublished,
-                        AuthorId = b.AuthorId,
-                        AuthorUsername = b.Author
-                    })
-                    .ToList()
-            })
-            .FirstOrDefault();
+        var user = await _userRepository.GetByIdAsync(id, cancellationToken);
+        return user is null
+            ? Result<UserResponse>.Fail(ResponseMessages.UserNotFound)
+            : Result<UserResponse>.Succeed(user, ResponseMessages.UserRetrieved);
     }
 
-    public bool Delete(int id)
+public async Task<Result<OperationResult>> DeleteAsync(int id, CancellationToken cancellationToken)
     {
-        var user = _context.Users.FirstOrDefault(u => u.Id == id);
-        if (user == null)
-            return false;
-
-        _context.Users.Remove(user);
-        _context.SaveChanges();
-        return true;
+        var deleted = await _userRepository.DeleteAsync(id, cancellationToken);
+        return deleted
+            ? Result<OperationResult>.Succeed(new OperationResult { Completed = true }, ResponseMessages.UserDeleted)
+            : Result<OperationResult>.Fail(ResponseMessages.UserNotFound);
     }
 }
+

@@ -1,113 +1,103 @@
-using BookRepositoryApi.Data;
+using BookRepositoryApi.Constants;
 using BookRepositoryApi.Models;
+using BookRepositoryApi.Models.Common;
+using BookRepositoryApi.Repositories.Interfaces;
 using BookRepositoryApi.Services.Interfaces;
-using Microsoft.EntityFrameworkCore;
 
 namespace BookRepositoryApi.Services;
 
+// Handles book-related business operations.
 public sealed class BookService : IBookService
 {
-    private readonly AppDbContext _context;
+    private readonly IBookRepository _bookRepository;
+    private readonly IUserRepository _userRepository;
 
-    public BookService(AppDbContext context)
+    // Initializes a new instance of the BookService class.
+    public BookService(IBookRepository bookRepository, IUserRepository userRepository)
     {
-        _context = context;
+        _bookRepository = bookRepository;
+        _userRepository = userRepository;
     }
 
-    public IReadOnlyCollection<BookResponse> GetAll()
+public async Task<Result<IReadOnlyCollection<BookResponse>>> GetAllAsync(CancellationToken cancellationToken)
     {
-        return _context.Books
-            .AsNoTracking()
-            .Include(b => b.AuthorUser)
-            .OrderBy(b => b.Title)
-            .Select(b => new BookResponse
-            {
-                Id = b.Id,
-                Title = b.Title,
-                Isbn = b.Isbn,
-                YearPublished = b.YearPublished,
-                AuthorId = b.AuthorId,
-                AuthorUsername = b.AuthorUser != null ? b.AuthorUser.Username : b.Author
-            })
-            .ToList();
+        var books = await _bookRepository.GetAllAsync(cancellationToken);
+        return Result<IReadOnlyCollection<BookResponse>>.Succeed(books, ResponseMessages.BooksRetrieved);
     }
 
-    public BookResponse? GetById(int id)
+public async Task<Result<BookResponse>> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
-        return _context.Books
-            .AsNoTracking()
-            .Include(b => b.AuthorUser)
-            .Where(b => b.Id == id)
-            .Select(b => new BookResponse
-            {
-                Id = b.Id,
-                Title = b.Title,
-                Isbn = b.Isbn,
-                YearPublished = b.YearPublished,
-                AuthorId = b.AuthorId,
-                AuthorUsername = b.AuthorUser != null ? b.AuthorUser.Username : b.Author
-            })
-            .FirstOrDefault();
+        var book = await _bookRepository.GetByIdAsync(id, cancellationToken);
+        return book is null
+            ? Result<BookResponse>.Fail(ResponseMessages.BookNotFound)
+            : Result<BookResponse>.Succeed(book, ResponseMessages.BookRetrieved);
     }
 
-    public BookResponse Create(CreateBookRequest request, int authorId)
+public async Task<Result<BookResponse>> CreateAsync(CreateBookRequest request, int authorId, CancellationToken cancellationToken)
     {
-        var username = _context.Users
-                              .Where(u => u.Id == authorId)
-                              .Select(u => u.Username)
-                              .FirstOrDefault() ?? string.Empty;
+        var username = await _userRepository.GetUsernameByIdAsync(authorId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            return Result<BookResponse>.Fail(ResponseMessages.AuthorNotFound);
+        }
 
         var book = new Book
         {
-            // let the database generate the id
             Title = request.Title.Trim(),
             AuthorId = authorId,
-            // duplicate the username for convenience; the controller will pass this in if it has access to the name claim
             Author = username,
             Isbn = request.Isbn.Trim(),
             YearPublished = request.YearPublished
         };
 
-        _context.Books.Add(book);
-        _context.SaveChanges();
-
-        return new BookResponse
-        {
-            Id = book.Id,
-            Title = book.Title,
-            Isbn = book.Isbn,
-            YearPublished = book.YearPublished,
-            AuthorId = book.AuthorId,
-            AuthorUsername = username
-        };
+        var createdBook = await _bookRepository.AddAsync(book, cancellationToken);
+        return Result<BookResponse>.Succeed(createdBook, ResponseMessages.BookCreated);
     }
 
-    public bool Update(int id, UpdateBookRequest request)
+public async Task<Result<BookResponse>> UpdateAsync(
+        int id,
+        UpdateBookRequest request,
+        int requestingUserId,
+        bool isAdmin,
+        CancellationToken cancellationToken)
     {
-        var book = _context.Books.FirstOrDefault(b => b.Id == id);
+        var book = await _bookRepository.GetForUpdateAsync(id, cancellationToken);
+        if (book is null)
+        {
+            return Result<BookResponse>.Fail(ResponseMessages.BookNotFound);
+        }
 
-        if (book == null)
-            return false;
+        if (!isAdmin && book.AuthorId != requestingUserId)
+        {
+            return Result<BookResponse>.Fail(ResponseMessages.Forbidden);
+        }
 
         book.Title = request.Title.Trim();
         book.Isbn = request.Isbn.Trim();
         book.YearPublished = request.YearPublished;
 
-        _context.SaveChanges();
-
-        return true;
+        var updatedBook = await _bookRepository.UpdateAsync(book, cancellationToken);
+        return Result<BookResponse>.Succeed(updatedBook, ResponseMessages.BookUpdated);
     }
 
-    public bool Delete(int id)
+public async Task<Result<OperationResult>> DeleteAsync(int id, int requestingUserId, bool isAdmin, CancellationToken cancellationToken)
     {
-        var book = _context.Books.FirstOrDefault(b => b.Id == id);
+        var book = await _bookRepository.GetForUpdateAsync(id, cancellationToken);
+        if (book is null)
+        {
+            return Result<OperationResult>.Fail(ResponseMessages.BookNotFound);
+        }
 
-        if (book == null)
-            return false;
+        if (!isAdmin && book.AuthorId != requestingUserId)
+        {
+            return Result<OperationResult>.Fail(ResponseMessages.Forbidden);
+        }
 
-        _context.Books.Remove(book);
-        _context.SaveChanges();
+        await _bookRepository.DeleteAsync(book, cancellationToken);
 
-        return true;
+        return Result<OperationResult>.Succeed(
+            new OperationResult { Completed = true },
+            ResponseMessages.BookDeleted);
     }
 }
+

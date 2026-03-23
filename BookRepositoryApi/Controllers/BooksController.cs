@@ -1,4 +1,7 @@
+using System.Security.Claims;
+using BookRepositoryApi.Constants;
 using BookRepositoryApi.Models;
+using BookRepositoryApi.Models.Common;
 using BookRepositoryApi.Routes;
 using BookRepositoryApi.Security;
 using BookRepositoryApi.Services.Interfaces;
@@ -13,108 +16,123 @@ public sealed class BooksController : ControllerBase
 {
     private readonly IBookService _bookService;
 
+    // Initializes a new instance of the BooksController class.
     public BooksController(IBookService bookService)
     {
         _bookService = bookService;
     }
 
+    // Retrieves all books visible to authenticated users.
     [HttpGet(ApiRoutes.Books.Root)]
     [Authorize(Roles = $"{Roles.Admin},{Roles.Author},{Roles.Reader}")]
-    [ProducesResponseType(typeof(IReadOnlyCollection<BookResponse>), StatusCodes.Status200OK)]
-    public ActionResult<IReadOnlyCollection<BookResponse>> GetAll()
+    [ProducesResponseType(typeof(ApiResponse<IReadOnlyCollection<BookResponse>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<IReadOnlyCollection<BookResponse>>>> GetAll(CancellationToken cancellationToken)
     {
-        return Ok(_bookService.GetAll());
+        var result = await _bookService.GetAllAsync(cancellationToken);
+        return Ok(ApiResponse<IReadOnlyCollection<BookResponse>>.FromResult(result));
     }
 
+    // Retrieves a single book by identifier.
     [HttpGet(ApiRoutes.Books.ById)]
     [Authorize(Roles = $"{Roles.Admin},{Roles.Author},{Roles.Reader}")]
-    [ProducesResponseType(typeof(BookResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult<BookResponse> GetById([FromRoute] int id)
+    [ProducesResponseType(typeof(ApiResponse<BookResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<BookResponse>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<BookResponse>>> GetById([FromRoute] int id, CancellationToken cancellationToken)
     {
-        var book = _bookService.GetById(id);
-        if (book is null)
+        var result = await _bookService.GetByIdAsync(id, cancellationToken);
+        if (!result.Success)
         {
-            return NotFound(new { message = "Book not found" });
+            return NotFound(ApiResponse<BookResponse>.Failure(result.Message));
         }
 
-        return Ok(book);
+        return Ok(ApiResponse<BookResponse>.FromResult(result));
     }
 
+    // Creates a new book owned by the authenticated user.
     [HttpPost(ApiRoutes.Books.Root)]
     [Authorize(Roles = $"{Roles.Admin},{Roles.Author}")]
-    [ProducesResponseType(typeof(BookResponse), StatusCodes.Status201Created)]
-    public ActionResult<BookResponse> Create([FromBody] CreateBookRequest request)
+    [ProducesResponseType(typeof(ApiResponse<BookResponse>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponse<BookResponse>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<BookResponse>), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ApiResponse<BookResponse>>> Create(
+        [FromBody] CreateBookRequest request,
+        CancellationToken cancellationToken)
     {
-        // take the current user id from the JWT claims
-        if (!int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var userId))
+        if (!TryGetCurrentUserId(out var userId))
         {
-            return Forbid();
+            return Unauthorized(ApiResponse<BookResponse>.Failure(ResponseMessages.Forbidden));
         }
 
-        var created = _bookService.Create(request, userId);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        var result = await _bookService.CreateAsync(request, userId, cancellationToken);
+        if (!result.Success)
+        {
+            return BadRequest(ApiResponse<BookResponse>.Failure(result.Message));
+        }
+
+        return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, ApiResponse<BookResponse>.FromResult(result));
     }
 
+    // Updates an existing book when the caller is an administrator or owner.
     [HttpPut(ApiRoutes.Books.ById)]
     [Authorize(Roles = $"{Roles.Admin},{Roles.Author}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public IActionResult Update([FromRoute] int id, [FromBody] UpdateBookRequest request)
+    [ProducesResponseType(typeof(ApiResponse<BookResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<BookResponse>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<BookResponse>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<BookResponse>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<BookResponse>>> Update(
+        [FromRoute] int id,
+        [FromBody] UpdateBookRequest request,
+        CancellationToken cancellationToken)
     {
-        var book = _bookService.GetById(id);
-        if (book is null)
+        if (!TryGetCurrentUserId(out var userId))
         {
-            return NotFound(new { message = "Book not found" });
+            return Unauthorized(ApiResponse<BookResponse>.Failure(ResponseMessages.Forbidden));
         }
 
-        var isAdmin = User.IsInRole(Roles.Admin);
-        if (!isAdmin)
+        var result = await _bookService.UpdateAsync(id, request, userId, User.IsInRole(Roles.Admin), cancellationToken);
+        if (!result.Success && result.Message == ResponseMessages.Forbidden)
         {
-            if (!int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var userId) || book.AuthorId != userId)
-            {
-                return Forbid();
-            }
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<BookResponse>.Failure(result.Message));
         }
 
-        var updated = _bookService.Update(id, request);
-        if (!updated)
+        if (!result.Success)
         {
-            return NotFound(new { message = "Book not found" });
+            return NotFound(ApiResponse<BookResponse>.Failure(result.Message));
         }
 
-        return NoContent();
+        return Ok(ApiResponse<BookResponse>.FromResult(result));
     }
 
+    // Deletes an existing book when the caller is an administrator or owner.
     [HttpDelete(ApiRoutes.Books.ById)]
     [Authorize(Roles = $"{Roles.Admin},{Roles.Author}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public IActionResult Delete([FromRoute] int id)
+    [ProducesResponseType(typeof(ApiResponse<OperationResult>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<OperationResult>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<OperationResult>), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiResponse<OperationResult>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<OperationResult>>> Delete([FromRoute] int id, CancellationToken cancellationToken)
     {
-        var book = _bookService.GetById(id);
-        if (book is null)
+        if (!TryGetCurrentUserId(out var userId))
         {
-            return NotFound(new { message = "Book not found" });
+            return Unauthorized(ApiResponse<OperationResult>.Failure(ResponseMessages.Forbidden));
         }
 
-        var isAdmin = User.IsInRole(Roles.Admin);
-        if (!isAdmin)
+        var result = await _bookService.DeleteAsync(id, userId, User.IsInRole(Roles.Admin), cancellationToken);
+        if (!result.Success && result.Message == ResponseMessages.Forbidden)
         {
-            if (!int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var userId) || book.AuthorId != userId)
-            {
-                return Forbid();
-            }
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<OperationResult>.Failure(result.Message));
         }
 
-        var deleted = _bookService.Delete(id);
-        if (!deleted)
+        if (!result.Success)
         {
-            return NotFound(new { message = "Book not found" });
+            return NotFound(ApiResponse<OperationResult>.Failure(result.Message));
         }
 
-        return NoContent();
+        return Ok(ApiResponse<OperationResult>.FromResult(result));
     }
+
+    // Attempts to read the current authenticated user identifier.
+    private bool TryGetCurrentUserId(out int userId) =>
+        int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out userId);
 }
+
